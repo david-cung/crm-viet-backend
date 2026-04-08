@@ -6,17 +6,36 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_active_user, require_admin
 from app import models
-from app.schemas import CompanyOut, CompanyUpdate, StaffMemberCreate, StaffMemberOut, StaffMemberUpdate
+from app.schemas import (
+    CompanyOut,
+    CompanyUpdate,
+    SmtpSettingsOut,
+    SmtpSettingsUpdate,
+    StaffMemberCreate,
+    StaffMemberOut,
+    StaffMemberUpdate,
+)
 
 router = APIRouter(prefix="/settings", tags=["settings"], dependencies=[Depends(get_current_active_user)])
 
 _COMPANY_ID = 1
+_SMTP_ID = 1
 
 
 def _get_company_row(db: Session) -> models.CompanySettings:
     row = db.get(models.CompanySettings, _COMPANY_ID)
     if not row:
         row = models.CompanySettings(id=_COMPANY_ID)
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    return row
+
+
+def _get_smtp_row(db: Session) -> models.SmtpSettings:
+    row = db.get(models.SmtpSettings, _SMTP_ID)
+    if not row:
+        row = models.SmtpSettings(id=_SMTP_ID)
         db.add(row)
         db.commit()
         db.refresh(row)
@@ -41,6 +60,30 @@ def patch_company(
     db.commit()
     db.refresh(row)
     return CompanyOut.from_row(row)
+
+
+@router.get("/smtp", response_model=SmtpSettingsOut)
+def get_smtp(db: Session = Depends(get_db), _admin: models.User = Depends(require_admin)) -> SmtpSettingsOut:
+    row = _get_smtp_row(db)
+    return SmtpSettingsOut(host=row.host, port=row.port, user=row.user, from_email=row.from_email, use_tls=row.use_tls)
+
+
+@router.patch("/smtp", response_model=SmtpSettingsOut)
+def patch_smtp(
+    body: SmtpSettingsUpdate,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+) -> SmtpSettingsOut:
+    row = _get_smtp_row(db)
+    data = body.model_dump(exclude_unset=True)
+    # Only update password when provided
+    for k, v in data.items():
+        if k == "password" and (v is None or v == ""):
+            continue
+        setattr(row, k, v)
+    db.commit()
+    db.refresh(row)
+    return SmtpSettingsOut(host=row.host, port=row.port, user=row.user, from_email=row.from_email, use_tls=row.use_tls)
 
 
 @router.get("/staff", response_model=list[StaffMemberOut])

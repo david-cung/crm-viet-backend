@@ -19,6 +19,26 @@ router = APIRouter(
     dependencies=[Depends(get_current_active_user)],
 )
 
+@router.get("/sources", response_model=list[str])
+def contact_sources(db: Session = Depends(get_db)) -> list[str]:
+    rows = db.query(models.Contact.source).all()
+    out = sorted({(r[0] or "").strip() for r in rows if (r[0] or "").strip()}, key=lambda s: s.lower())
+    return out
+
+
+@router.get("/tags", response_model=list[str])
+def contact_tags(db: Session = Depends(get_db)) -> list[str]:
+    rows = db.query(models.Contact.tags).all()
+    tags: set[str] = set()
+    for (arr,) in rows:
+        if not arr:
+            continue
+        for t in list(arr):
+            ts = str(t).strip()
+            if ts:
+                tags.add(ts)
+    return sorted(tags, key=lambda s: s.lower())
+
 
 def _contact_filter(db: Session, q: str | None, status_v: str | None, assigned_to: str | None):
     query = db.query(models.Contact)

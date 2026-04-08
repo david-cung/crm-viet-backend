@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_active_user
 from app import models
+from app.schemas import DashboardKpisOut
 
 router = APIRouter(prefix="/reports", tags=["reports"], dependencies=[Depends(get_current_active_user)])
 
@@ -44,6 +45,15 @@ def _parse_close_date(d: models.Deal) -> date | None:
     if not d.close_date:
         return None
     raw = d.close_date
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError:
+        return None
+
+
+def _parse_iso_date(raw: str | None) -> date | None:
+    if not raw:
+        return None
     try:
         return date.fromisoformat(raw[:10])
     except ValueError:
@@ -214,4 +224,59 @@ def daily_revenue(
         out.append({"date": k, "label": f"{cur.day}/{cur.month}", "revenue": float(buckets.get(k, Decimal(0)))})
         cur += timedelta(days=1)
     return out
+
+
+@router.get("/dashboard-kpis", response_model=DashboardKpisOut)
+def dashboard_kpis(db: Session = Depends(get_db)) -> DashboardKpisOut:
+    today = date.today()
+    month_start = today.replace(day=1)
+
+    contacts_total = db.query(models.Contact).count()
+
+    deals = db.query(models.Deal).all()
+    active_leads = sum(1 for d in deals if d.stage not in ("won", "lost"))
+
+    won_deals = [d for d in deals if d.stage == "won"]
+    lost_deals = [d for d in deals if d.stage == "lost"]
+
+    def in_this_month(d: models.Deal) -> bool:
+        cd = _parse_close_date(d) or _parse_iso_date(d.close_date)
+        if not cd:
+            return False
+        return month_start <= cd <= today
+
+    won_this_month = sum(1 for d in won_deals if in_this_month(d))
+    lost_this_month = sum(1 for d in lost_deals if in_this_month(d))
+    decided = won_this_month + lost_this_month
+    win_rate = int(round((won_this_month / decided) * 100)) if decided else 0
+
+    revenue_won_total = float(sum((d.value for d in won_deals), start=Decimal(0)))
+    revenue_forecast = float(
+        sum(
+            (d.value * Decimal(d.probability) / Decimal(100) for d in deals if d.stage not in ("won", "lost")),
+            start=Decimal(0),
+        )
+    )
+
+    tasks = db.query(models.Task).all()
+    tasks_open = sum(1 for t in tasks if t.status != "done")
+    tasks_due_today = 0
+    for t in tasks:
+        if t.status == "done":
+            continue
+        du = _parse_iso_date(t.due_date)
+        if du and du == today:
+            tasks_due_today += 1
+
+    return DashboardKpisOut(
+        contacts_total=contacts_total,
+        active_leads=active_leads,
+        tasks_open=tasks_open,
+        tasks_due_today=tasks_due_today,
+        won_this_month=won_this_month,
+        lost_this_month=lost_this_month,
+        win_rate_this_month=win_rate,
+        revenue_won_total=revenue_won_total,
+        revenue_forecast=revenue_forecast,
+    )
 

@@ -449,3 +449,32 @@ class EmailTestIn(CamelModel):
     to: str
     subject: str = "CRM Việt — thử nghiệm SMTP"
     body: str = "Đây là email thử từ CRM."
+
+
+class DashboardKpisOut(CamelModel):
+    contacts_total: int = Field(serialization_alias="contactsTotal")
+    active_leads: int = Field(serialization_alias="activeLeads")
+    tasks_open: int = Field(serialization_alias="tasksOpen")
+    tasks_due_today: int = Field(serialization_alias="tasksDueToday")
+    won_this_month: int = Field(serialization_alias="wonThisMonth")
+    lost_this_month: int = Field(serialization_alias="lostThisMonth")
+    win_rate_this_month: int = Field(serialization_alias="winRateThisMonth")
+    revenue_won_total: float = Field(serialization_alias="revenueWonTotal")
+    revenue_forecast: float = Field(serialization_alias="revenueForecast")
+
+
+class SmtpSettingsOut(CamelModel):
+    host: str
+    port: int
+    user: str
+    from_email: str = Field(serialization_alias="fromEmail")
+    use_tls: bool = Field(serialization_alias="useTls")
+
+
+class SmtpSettingsUpdate(CamelModel):
+    host: Optional[str] = None
+    port: Optional[int] = None
+    user: Optional[str] = None
+    password: Optional[str] = None
+    from_email: Optional[str] = Field(default=None, serialization_alias="fromEmail")
+    use_tls: Optional[bool] = Field(default=None, serialization_alias="useTls")

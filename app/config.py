@@ -21,5 +21,20 @@ class Settings(BaseSettings):
     # Zalo OA webhook (Sprint 4 — verify token)
     zalo_oa_verify_token: str = ""
 
+    # AWS S3 (File storage)
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_region: str = "ap-southeast-1"
+    s3_bucket_name: str = ""
+    s3_presign_ttl: int = 900
+
+    # Chat encryption (AES-256-GCM) — 32 bytes hex (openssl rand -hex 32)
+    chat_encryption_key: str = ""
+
+    # Redis / Celery
+    redis_url: str = "redis://localhost:6379/0"
+    celery_broker_url: str = "redis://localhost:6379/1"
+    celery_result_backend: str = "redis://localhost:6379/2"
+
 
 settings = Settings()

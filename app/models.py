@@ -139,3 +139,103 @@ class CompanySettings(Base):
     phone: Mapped[str] = mapped_column(String(64), default="")
     address: Mapped[str] = mapped_column(String(512), default="")
     website: Mapped[str] = mapped_column(String(255), default="")
+
+
+class SmtpSettings(Base):
+    __tablename__ = "smtp_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    host: Mapped[str] = mapped_column(String(255), default="")
+    port: Mapped[int] = mapped_column(Integer, nullable=False, default=587)
+    user: Mapped[str] = mapped_column(String(255), default="")
+    password: Mapped[str] = mapped_column(String(255), default="")
+    from_email: Mapped[str] = mapped_column(String(255), default="")
+    use_tls: Mapped[bool] = mapped_column(nullable=False, default=True)
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    type: Mapped[str] = mapped_column(String(16), nullable=False, default="direct")  # direct | group
+    name: Mapped[str] = mapped_column(String(255), default="")
+    avatar_url: Mapped[str] = mapped_column(String(512), default="")
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    members: Mapped[list["ConversationMember"]] = relationship("ConversationMember", back_populates="conversation")
+
+
+class ConversationMember(Base):
+    __tablename__ = "conversation_members"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("conversations.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False, default="member")  # admin | member
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_muted: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+    conversation: Mapped["Conversation"] = relationship("Conversation", back_populates="members")
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("conversations.id"), nullable=False)
+    sender_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+
+    content_encrypted: Mapped[str] = mapped_column(Text, default="")
+    content_iv: Mapped[str] = mapped_column(String(255), default="")
+    content_tag: Mapped[str] = mapped_column(String(255), default="")
+
+    message_type: Mapped[str] = mapped_column(String(16), nullable=False, default="text")
+    file_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("message_files.id"), nullable=True)
+    reply_to_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("messages.id"), nullable=True)
+    reactions: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, insert_default=dict)
+    is_deleted: Mapped[bool] = mapped_column(nullable=False, default=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class MessageFile(Base):
+    __tablename__ = "message_files"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    message_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("messages.id"), nullable=True)
+    uploader_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    original_name: Mapped[str] = mapped_column(String(512), default="")
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    mime_type: Mapped[str] = mapped_column(String(255), default="")
+    s3_key: Mapped[str] = mapped_column(String(1024), nullable=False)
+    thumbnail_s3_key: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class MessageReadReceipt(Base):
+    __tablename__ = "message_read_receipts"
+
+    message_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("messages.id"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class DataImportLog(Base):
+    __tablename__ = "data_import_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    module: Mapped[str] = mapped_column(String(64), nullable=False)          # employees | payroll | commission | cashflow | products | debts
+    file_name: Mapped[str] = mapped_column(String(512), default="")
+    imported_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    total_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    success_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    errors: Mapped[list] = mapped_column(JSONB, nullable=False, insert_default=list)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="done")  # done | partial | failed
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
